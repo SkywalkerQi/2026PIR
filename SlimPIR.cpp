@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -30,6 +31,11 @@ using Poly = std::vector<u64>;
 #endif
 
 constexpr int kThreadCount = SMALLPIR_THREAD_COUNT;
+
+bool SmallPirVerbose()
+{
+    return std::getenv("SMALLPIR_VERBOSE") != nullptr;
+}
 
 struct VfEntry
 {
@@ -1016,7 +1022,7 @@ std::vector<u64> LoadOrPrecomputeSelectorWeights(const SmallPirParams &pp)
 {
     if (std::getenv("SMALLPIR_EXACT_SELECTOR_WEIGHTS") != nullptr)
     {
-        std::cerr << "[dbg] selector weights exact build\n";
+        if (SmallPirVerbose()) std::cerr << "[dbg] selector weights exact build\n";
         return PrecomputeSelectorWeights(pp);
     }
 
@@ -1027,21 +1033,24 @@ std::vector<u64> LoadOrPrecomputeSelectorWeights(const SmallPirParams &pp)
     {
         if (completed == pp.c)
         {
-            std::cerr << "[dbg] selector weights cache hit: " << path << '\n';
+            if (SmallPirVerbose()) std::cerr << "[dbg] selector weights cache hit: " << path << '\n';
             return weights;
         }
-        std::cerr << "[dbg] selector weights cache resume: " << path
-                  << " completed=" << completed << " / " << pp.c << '\n';
+        if (SmallPirVerbose())
+        {
+            std::cerr << "[dbg] selector weights cache resume: " << path
+                      << " completed=" << completed << " / " << pp.c << '\n';
+        }
     }
     else
     {
-        std::cerr << "[dbg] selector weights cache miss: " << path << '\n';
+        if (SmallPirVerbose()) std::cerr << "[dbg] selector weights cache miss: " << path << '\n';
     }
 
-    std::cerr << "[dbg] selector weights formula build\n";
+    if (SmallPirVerbose()) std::cerr << "[dbg] selector weights formula build\n";
     weights = BuildSelectorWeightsFormula(pp);
     SaveSelectorWeightsCache(pp, weights, pp.c);
-    std::cerr << "[dbg] selector weights cache saved: " << path << '\n';
+    if (SmallPirVerbose()) std::cerr << "[dbg] selector weights cache saved: " << path << '\n';
     return weights;
 }
 
@@ -1232,7 +1241,7 @@ VacuumFilter BuildVacuumFilter(const std::vector<std::pair<u64, u64>> &db, Small
         }
         if (!chunk_feasible)
         {
-            if (seed_trial < 4 || ((seed_trial + 1) % 8 == 0))
+            if (SmallPirVerbose() && (seed_trial < 4 || ((seed_trial + 1) % 8 == 0)))
             {
                 std::cerr << "[vf] seed=" << candidate_seed
                           << " rejected by chunk-capacity precheck"
@@ -1243,10 +1252,13 @@ VacuumFilter BuildVacuumFilter(const std::vector<std::pair<u64, u64>> &db, Small
         }
 
         ++feasible_seed_count;
-        std::cerr << "[vf] seed=" << candidate_seed
-                  << " passed precheck"
-                  << " max_chunk_load=" << max_chunk_load
-                  << " attempt_budget=" << pp.vf_build_retries << '\n';
+        if (SmallPirVerbose())
+        {
+            std::cerr << "[vf] seed=" << candidate_seed
+                      << " passed precheck"
+                      << " max_chunk_load=" << max_chunk_load
+                      << " attempt_budget=" << pp.vf_build_retries << '\n';
+        }
 
         for (std::size_t attempt = 0; attempt < pp.vf_build_retries; ++attempt)
         {
@@ -1349,13 +1361,16 @@ VacuumFilter BuildVacuumFilter(const std::vector<std::pair<u64, u64>> &db, Small
                 }
                 if (!inserted)
                 {
-                    std::cerr << "[vf] seed=" << candidate_seed
-                              << " attempt=" << attempt
-                              << " failed after inserting " << inserted_count
-                              << " / " << db.size()
-                              << " items; fp_class=" << (fp & 3ULL)
-                              << " gb1=" << global_bucket1
-                              << " gb2=" << global_bucket2 << '\n';
+                    if (SmallPirVerbose())
+                    {
+                        std::cerr << "[vf] seed=" << candidate_seed
+                                  << " attempt=" << attempt
+                                  << " failed after inserting " << inserted_count
+                                  << " / " << db.size()
+                                  << " items; fp_class=" << (fp & 3ULL)
+                                  << " gb1=" << global_bucket1
+                                  << " gb2=" << global_bucket2 << '\n';
+                    }
                     build_ok = false;
                     break;
                 }
@@ -1364,9 +1379,12 @@ VacuumFilter BuildVacuumFilter(const std::vector<std::pair<u64, u64>> &db, Small
 
             if (build_ok)
             {
-                std::cerr << "[vf] build succeeded with seed=" << candidate_seed
-                          << " attempt=" << attempt
-                          << " feasible_seeds_seen=" << feasible_seed_count << '\n';
+                if (SmallPirVerbose())
+                {
+                    std::cerr << "[vf] build succeeded with seed=" << candidate_seed
+                              << " attempt=" << attempt
+                              << " feasible_seeds_seen=" << feasible_seed_count << '\n';
+                }
                 return vf;
             }
         }
@@ -2173,15 +2191,15 @@ int main(int argc, char **argv)
         std::vector<u64> selector_weights_public;
         if (online_only)
         {
-            std::cerr << "[dbg] online-only: skipping selector weights\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] online-only: skipping selector weights\n";
         }
         else
         {
             selector_weights_public = BuildEffectiveSelectorWeights(pp, sliced_query, encrypted_slice);
-            std::cerr << "[dbg] selector weights ready\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] selector weights ready\n";
         }
         const GbfvEncoding gbfv = BuildToyGbfvEncoding(pp);
-        std::cerr << "[dbg] gbfv encoding ready\n";
+        if (SmallPirVerbose()) std::cerr << "[dbg] gbfv encoding ready\n";
 
         const std::size_t db_size = 1ULL << n_log2;
         const u64 target_key = std::min<u64>(523123ULL, static_cast<u64>(db_size));
@@ -2196,7 +2214,7 @@ int main(int argc, char **argv)
             {
                 weighted_chunk_polys_by_limb.emplace_back(pp.c, one);
             }
-            std::cerr << "[dbg] online-only: using constant-one chunk plaintexts\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] online-only: using constant-one chunk plaintexts\n";
         }
         else if (online_packed_prep)
         {
@@ -2206,7 +2224,7 @@ int main(int argc, char **argv)
                     pp, gbfv, target_load, limb);
                 weighted_chunk_polys_by_limb.emplace_back(pp.c, representative);
             }
-            std::cerr << "[dbg] online-only: using representative packed chunk plaintexts\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] online-only: using representative packed chunk plaintexts\n";
         }
         else
         {
@@ -2221,10 +2239,10 @@ int main(int argc, char **argv)
                 u64 value = SyntheticSmallValueLimb(key, 0, pp);
                 db.emplace_back(key, value);
             }
-            std::cerr << "[dbg] db ready size=" << db.size() << "\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] db ready size=" << db.size() << "\n";
 
             VacuumFilter vf = BuildVacuumFilter(db, pp);
-            std::cerr << "[dbg] vf ready\n";
+            if (SmallPirVerbose()) std::cerr << "[dbg] vf ready\n";
             if (std::getenv("SMALLPIR_DEBUG_RECOVER") != nullptr)
             {
                 const u64 route = RoutingTag(target_key);
@@ -2276,11 +2294,8 @@ int main(int argc, char **argv)
             weighted_chunk_polys_ntt_by_limb.push_back(
                 TransformPlaintextsToNtt(weighted_chunk_polys, context, evaluator));
         }
-        std::cerr << "[dbg] chunk polys ready\n";
+        if (SmallPirVerbose()) std::cerr << "[dbg] chunk polys ready\n";
         const auto t_prep_e = Clock::now();
-
-        const u64 expected_value =
-            static_cast<u64>((static_cast<unsigned __int128>(target_key) * 2654435761ULL + 12345ULL) & 0xFFFFFFFFULL);
 
         const auto t_query_s = Clock::now();
         Query query = BuildQuery(target_key, pp, gbfv, encryptor, sliced_query, encrypted_slice);
@@ -2327,68 +2342,34 @@ int main(int argc, char **argv)
             }
         }
 
-        std::cout << "===== SmallPIR Demo =====\n";
         std::string mode = online_packed_prep ? "ONLINE_ONLY_PACKED_PREP" :
                            (online_const_prep ? "ONLINE_ONLY_CONST_PREP" : "FULL");
         if (sliced_query) mode += encrypted_slice ? "_SLICED_ENC_SLICE" : "_SLICED_PLAIN_SLICE";
-        std::cout << "mode            : " << mode << '\n';
-        std::cout << "n               : 2^" << n_log2 << " = " << db_size << '\n';
-        std::cout << "N               : " << pp.poly_modulus_degree << '\n';
-        std::cout << "VF params        : c=" << pp.c << ", b=" << pp.b << ", s=" << pp.s << '\n';
-        std::cout << "target load      : " << target_load << '\n';
-        std::cout << "expand length    : " << NextPow2(pp.c) << " (trimmed to c)\n";
-        if (sliced_query)
-        {
-            std::cout << "slice params     : slice_len=" << query.slice_len
-                      << ", slice_count=" << query.slice_count << '\n';
-            std::cout << "slice expand     : chunk=" << NextPow2(query.slice_len)
-                      << ", slice=" << NextPow2(query.slice_count) << '\n';
-        }
-        std::cout << "plain modulus p  : " << pp.plain_modulus << '\n';
-        std::cout << "value bits       : " << total_value_bits
-                  << " (limbs=" << value_limb_count
-                  << ", limb_bits=" << pp.value_bits << ")\n";
-        std::cout << "GBFV slot mode   : " << (pp.gbfv_fp4_slots ? "Fp4 degree-4 slots" : "linear Fp toy slots") << '\n';
-        if (pp.gbfv_binomial_t)
-        {
-            std::cout << "GBFV t mode      : binomial x^(N/2)-B\n";
-        }
-        std::cout << "GBFV slots/chunk : " << (pp.gbfv_fp4_slots ? pp.b : (pp.b * pp.s)) << '\n';
-        std::cout << "entries/chunk    : " << (pp.b * pp.s) << '\n';
-        std::cout << "GBFV beta degree : "
-                  << (gbfv.beta_is_one ? 0 : (TrimPoly(gbfv.beta_poly).size() - 1))
-                  << (gbfv.beta_is_one ? " (beta=1)\n" : "\n");
-        std::cout << "noise q_bk       : " << decryptor.invariant_noise_budget(query.q_bk_gbfv) << " bits\n";
-        std::cout << "noise ans        : " << min_noise_ans << " bits (min over limbs)\n";
-        std::cout << "target key       : " << target_key << '\n';
-        std::cout << "target chunk     : " << query.target_chunk << '\n';
-        if (sliced_query)
-        {
-            std::cout << "target slice     : " << query.target_slice
-                      << ", local chunk=" << query.local_chunk << '\n';
-        }
-        std::cout << "candidate bucket : (" << query.bucket1 << ", " << query.bucket2 << ")\n";
-        std::cout << "slot polys/chunk : " << pp.s << '\n';
-        std::cout << "answer ct count  : " << value_limb_count << '\n';
-        std::cout << "expected value   : " << expected_value << " (legacy 32-bit display)\n";
-        std::cout << "recovered value  : "
-                  << (!recovered_limbs.empty() && recovered_limbs[0].has_value() ?
-                          std::to_string(recovered_limbs[0].value()) :
-                          std::string("NOT FOUND"))
-                  << " (limb 0 display)\n";
-        std::cout << "verify           : " << (online_only ? "SKIPPED" : (ok ? "PASS" : "FAIL")) << '\n';
-        std::cout << "Prep time        : " << Ms(t_prep_e - t_prep_s).count() << " ms\n";
-        std::cout << "Query time       : " << Ms(t_query_e - t_query_s).count() << " ms\n";
-        std::cout << "Answer time      : " << Ms(t_answer_e - t_answer_s).count() << " ms\n";
+
+        const double prep_ms = Ms(t_prep_e - t_prep_s).count();
+        const double query_ms = Ms(t_query_e - t_query_s).count();
+        const double answer_ms = Ms(t_answer_e - t_answer_s).count();
+        const double decrypt_ms = Ms(t_dec_e - t_dec_s).count();
+        const double online_total_ms = query_ms + answer_ms + decrypt_ms;
+
+        std::cout << std::fixed << std::setprecision(3);
+        std::cout << "timing_ms prep=" << prep_ms
+                  << ", request=" << query_ms
+                  << ", expand=" << total_resp.expand_ms
+                  << ", select=" << total_resp.select_ms
+                  << ", ctct=" << total_resp.ctct_ms
+                  << ", response=" << answer_ms
+                  << ", answer=" << decrypt_ms
+                  << ", online_total=" << online_total_ms << "\n";
+
+        std::cout << "Prep time        : " << prep_ms << " ms\n";
+        std::cout << "Query time       : " << query_ms << " ms\n";
+        std::cout << "Answer time      : " << answer_ms << " ms\n";
         std::cout << "  Expand time    : " << total_resp.expand_ms << " ms\n";
         std::cout << "  Select time    : " << total_resp.select_ms << " ms\n";
         std::cout << "  ct-ct time     : " << total_resp.ctct_ms << " ms\n";
-        std::cout << "Decrypt time     : " << Ms(t_dec_e - t_dec_s).count() << " ms\n";
-        std::cout << "Online total     : "
-                  << (Ms(t_query_e - t_query_s).count() +
-                      Ms(t_answer_e - t_answer_s).count() +
-                      Ms(t_dec_e - t_dec_s).count())
-                  << " ms\n";
+        std::cout << "Decrypt time     : " << decrypt_ms << " ms\n";
+        std::cout << "Online total     : " << online_total_ms << " ms\n";
 
         return ok ? 0 : 2;
     }
