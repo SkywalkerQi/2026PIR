@@ -1,13 +1,6 @@
 # 2026PIR
 
-This is the c++ implementation of SlimPIR (submitted to ICDE2027) using the Microsoft SEAL library~\cite{sealcrypto}. We performed our experiments server running Ubuntu 20.04.6, equipped with an Intel Xeon Gold CPU @ 2.10 GHz and 192 GB of RAM. All experiments are performed with single-threaded execution.
-
-
-# SlimPIR README
-
-`SlimPIR.cpp` is a single-file implementation of the SlimPIR/SmallPIR prototype. It benchmarks a keyword PIR design based on a Vacuum Filter layout and BFV/GBFV-style encrypted selectors.
-
-This README explains how to build the file, run it, and configure the main parameters, especially the database size and value size.
+This is the c++ implementation of SlimPIR (submitted to ICDE2027) using the Microsoft SEAL library~\cite{sealcrypto}. We performed our experiments server running Ubuntu 20.04.6, equipped with an Intel Xeon Gold CPU @ 2.10 GHz and 192 GB of RAM. All experiments are performed with single-threaded execution. This README explains how to build the file, run it, and configure the main parameters, especially the database size and value size.
 
 ## Dependencies
 
