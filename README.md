@@ -3,17 +3,23 @@
 This is the c++ implementation of SlimPIR (submitted to ICDE2027) using the Microsoft SEAL library~\cite{sealcrypto}. We performed our experiments server running Ubuntu 20.04.6, equipped with an Intel Xeon Gold CPU @ 2.10 GHz and 192 GB of RAM. All experiments are performed with single-threaded execution.
 
 
-# SlimPIR 使用说明
+# SlimPIR README
 
-`SlimPIR.cpp` 是 SmallPIR/SlimPIR 的单文件实验程序，用于测试 Vacuum Filter + GBFV/BFV selector 的在线查询流程。程序支持 full-prep 和 online-only 两种测试方式；大规模实验建议先用 online-only packed prep。
+`SlimPIR.cpp` is a single-file implementation of the SlimPIR/SmallPIR prototype. It benchmarks a keyword PIR design based on a Vacuum Filter layout and BFV/GBFV-style encrypted selectors.
 
-## 依赖
+This README explains how to build the file, run it, and configure the main parameters, especially the database size and value size.
 
-- C++17 编译器，例如 `g++`
-- Microsoft SEAL 头文件和静态库
-- 可选：OpenMP，用于多线程版本
+## Dependencies
 
-本仓库当前可直接复用 `Pantheon/SEAL_parallel` 里的 SEAL：
+- A C++17 compiler, such as `g++`
+- Microsoft SEAL headers and static library
+- Optional: OpenMP for multi-threaded builds
+
+The current workspace can reuse the SEAL build under `Pantheon/SEAL_parallel`.
+
+## Build
+
+Single-thread build:
 
 ```bash
 g++ -O2 -std=c++17 SlimPIR.cpp -o SlimPIR \
@@ -23,7 +29,7 @@ g++ -O2 -std=c++17 SlimPIR.cpp -o SlimPIR \
   -pthread
 ```
 
-如果要编译多线程版本，例如 8 线程：
+Example 8-thread build:
 
 ```bash
 g++ -O2 -std=c++17 -fopenmp -DSMALLPIR_THREAD_COUNT=8 SlimPIR.cpp -o SlimPIR_t8 \
@@ -33,123 +39,105 @@ g++ -O2 -std=c++17 -fopenmp -DSMALLPIR_THREAD_COUNT=8 SlimPIR.cpp -o SlimPIR_t8 
   -pthread
 ```
 
-## 命令行参数
+To build other thread counts, change `SMALLPIR_THREAD_COUNT` and the output name, for example `SlimPIR_t16` or `SlimPIR_t32`.
 
-运行格式：
+## Command-Line Parameters
+
+Run format:
 
 ```bash
 ./SlimPIR [n_log2] [N] [b] [s] [c] [load] [plain_modulus_bits] [fp_bits] [value_bits]
 ```
 
-参数含义：
+Parameter meaning:
 
-| 位置 | 参数 | 含义 | 默认值 |
+| Position | Parameter | Meaning | Default |
 |---:|---|---|---:|
-| 1 | `n_log2` | 数据量为 `2^n_log2` | `20` |
-| 2 | `N` | BFV 多项式阶，即 `poly_modulus_degree` | `8192` |
-| 3 | `b` | 每个 chunk 中的 bucket 数 | `1024` |
-| 4 | `s` | 每个 bucket 中的 slot 数 | `4` |
-| 5 | `c` | chunk 数 | 自动按 load 计算 |
-| 6 | `load` | Vacuum Filter 目标负载率 | `0.9343` |
-| 7 | `plain_modulus_bits` | plaintext modulus 的 bit 数 | `37` |
-| 8 | `fp_bits` | fingerprint bit 数 | `4` |
-| 9 | `value_bits` | 每条数据 value 的 bit 数 | `32` |
+| 1 | `n_log2` | Number of records is `2^n_log2` | `20` |
+| 2 | `N` | BFV polynomial modulus degree | `8192` |
+| 3 | `b` | Number of buckets per chunk | `1024` |
+| 4 | `s` | Number of slots per bucket | `4` |
+| 5 | `c` | Number of chunks | computed from `load` if omitted |
+| 6 | `load` | Target Vacuum Filter load factor | `0.9343` |
+| 7 | `plain_modulus_bits` | Bit length of the plaintext modulus | `37` |
+| 8 | `fp_bits` | Fingerprint bit length | `4` |
+| 9 | `value_bits` | Value size in bits | `32` |
 
-最常改的是：
+The two most important parameters are:
 
-- 数据量：改第 1 个参数 `n_log2`，例如 `28` 表示 `2^28` 条数据。
-- 数据大小：改第 9 个参数 `value_bits`，例如 `32`、`64`、`128`、`256`。
+- Database size: set `n_log2`. For example, `28` means `2^28` records.
+- Value size: set `value_bits`. For example, `32` means each value is 32 bits.
 
-注意：`value_bits > 32` 时，程序会把 value 拆成多个 32-bit limb，并对每个 limb 跑一次响应流程。当前 full-prep 路径只支持一个 limb；测试 64/128/256-bit value 时请使用 `SMALLPIR_ONLINE_PACKED_PREP=1`。
+The current full-preprocessing path supports one 32-bit value limb. Therefore, use `value_bits <= 32` for full end-to-end correctness tests unless the code is extended to support full preprocessing for multiple limbs.
 
-## 常用环境变量
+## Recommended Parameters
 
-| 环境变量 | 作用 |
-|---|---|
-| `SMALLPIR_ONLINE_ONLY=1` | online-only，使用常数 plaintext 占位，最快但不够真实 |
-| `SMALLPIR_ONLINE_PACKED_PREP=1` | online-only，构造代表性的 packed chunk plaintext，推荐用于大规模在线测试 |
-| `SMALLPIR_SLICED=1` | 开启 sliced query，将 chunk selector 拆成 slice selector + intra-slice selector |
-| `SMALLPIR_ENCRYPTED_SLICE=1` | slice selector 也加密；需要同时设置 `SMALLPIR_SLICED=1` |
-| `SMALLPIR_GBFV_FP4=1` | 使用模拟的 `F_{p^4}` slot，每个 bucket 打包到一个 degree-4 slot |
-| `SMALLPIR_GBFV_BINOMIAL=1` | 使用 binomial `t(x)` 的 GBFV 模拟路径 |
-| `SMALLPIR_COEFF_PRIMES=6` | encrypted-slice 模式下设置 coeff modulus 为 `6 x 55-bit` |
-| `SMALLPIR_VERBOSE=1` | 输出调试信息 |
-| `SMALLPIR_DEBUG_RECOVER=1` | 输出恢复阶段的 bucket/slot 调试信息 |
-| `SMALLPIR_EXACT_SELECTOR_WEIGHTS=1` | 使用慢速精确 selector weight 预计算，通常只用于验证 |
+The following parameter set is used for the current 32-bit value experiments.
 
-## 推荐运行方式
+| Records | `n_log2` | `N` | `c` | `b` | `s` | Load |
+|---:|---:|---:|---:|---:|---:|---:|
+| `2^20` | 20 | 4096 | 284 | 1024 | 4 | about 0.9000 |
+| `2^22` | 22 | 8192 | 568 | 2048 | 4 | about 0.9000 |
+| `2^24` | 24 | 16384 | 1137 | 4096 | 4 | about 0.9000 |
+| `2^26` | 26 | 16384 | 4551 | 4096 | 4 | about 0.9001 |
+| `2^28` | 28 | 32768 | 9102 | 8192 | 4 | about 0.9000 |
 
-### 1. 小规模 full-prep 正确性测试
+When `c` is explicitly provided, the program uses that value directly. The `load` argument is only used to compute `c` when `c` is omitted.
 
-full-prep 会真实构建 synthetic database、插入 Vacuum Filter，并打包所有 chunk。建议先用 `2^20` 以内测试：
+## Run Examples
+
+Small correctness test with `2^20` records and 32-bit values:
 
 ```bash
 SMALLPIR_GBFV_FP4=1 \
 ./SlimPIR 20 4096 1024 4 284 0.900022 50 16 32
 ```
 
-如果 full-prep 成功，程序会输出：
-
-```text
-timing_ms prep=..., request=..., expand=..., select=..., ctct=..., response=..., answer=..., online_total=...
-```
-
-### 2. 大规模 online-only packed prep 测试
-
-大规模测试建议使用 packed prep，占位 plaintext 更接近真实 packed chunk，但不构建完整数据库：
+Larger run with `2^24` records and 32-bit values:
 
 ```bash
 SMALLPIR_GBFV_FP4=1 \
-SMALLPIR_ONLINE_PACKED_PREP=1 \
-SMALLPIR_SLICED=1 \
-SMALLPIR_ENCRYPTED_SLICE=1 \
-SMALLPIR_COEFF_PRIMES=6 \
-./SlimPIR 28 32768 8192 4 9102 0.900022 50 16 32
+./SlimPIR 24 16384 4096 4 1137 0.900000 50 16 32
 ```
 
-其中最后的 `32` 是 value bit 数。如果要测试 128-bit value：
+The last argument controls the value size. For example, this command sets 16-bit values:
 
 ```bash
 SMALLPIR_GBFV_FP4=1 \
-SMALLPIR_ONLINE_PACKED_PREP=1 \
-SMALLPIR_SLICED=1 \
-SMALLPIR_ENCRYPTED_SLICE=1 \
-SMALLPIR_COEFF_PRIMES=6 \
-./SlimPIR 28 32768 8192 4 9102 0.900022 50 16 128
+./SlimPIR 20 4096 1024 4 284 0.900022 50 16 16
 ```
 
-## 推荐参数表
+## Environment Variables
 
-下面是当前实验中使用的一组 32-bit value 参数：
-
-| 数据量 | `n_log2` | `N` | `c` | `b` | `s` | load 约值 |
-|---:|---:|---:|---:|---:|---:|---:|
-| `2^20` | 20 | 4096 | 284 | 1024 | 4 | 0.9000 |
-| `2^22` | 22 | 8192 | 568 | 2048 | 4 | 0.9000 |
-| `2^24` | 24 | 16384 | 1137 | 4096 | 4 | 0.9000 |
-| `2^26` | 26 | 16384 | 4551 | 4096 | 4 | 0.9001 |
-| `2^28` | 28 | 32768 | 9102 | 8192 | 4 | 0.9000 |
-
-运行时命令中的 `load` 参数只用于 online-only representative plaintext 的填充率，或者在省略 `c` 时自动计算 chunk 数。若已经显式给出 `c`，程序不会用 load 重新覆盖 `c`。
-
-## 输出字段
-
-程序输出的核心时间字段如下，单位都是 ms：
-
-| 字段 | 含义 |
+| Environment variable | Meaning |
 |---|---|
-| `prep` | full-prep 或 online-only plaintext 准备时间 |
-| `request` / `Query time` | 客户端生成加密查询的时间 |
-| `expand` | 服务端扩展 compact selector 的时间 |
-| `select` | 服务端用 expanded selector 选择 chunk/slice 的时间 |
-| `ctct` | 服务端执行 ciphertext-ciphertext bucket/slice 选择的时间 |
-| `response` / `Answer time` | 服务端完整 Answer 时间 |
-| `answer` / `Decrypt time` | 客户端解密并比较 fingerprint 的时间 |
+| `SMALLPIR_GBFV_FP4=1` | Use simulated `F_{p^4}` slots; each bucket is packed into one degree-4 slot |
+| `SMALLPIR_GBFV_BINOMIAL=1` | Use the binomial `t(x)` GBFV simulation path |
+| `SMALLPIR_SLICED=1` | Use sliced chunk selection |
+| `SMALLPIR_ENCRYPTED_SLICE=1` | Encrypt the slice selector; requires `SMALLPIR_SLICED=1` |
+| `SMALLPIR_COEFF_PRIMES=6` | In encrypted-slice mode, set the coefficient modulus chain to `6 x 55-bit` |
+| `SMALLPIR_VERBOSE=1` | Print debug messages |
+| `SMALLPIR_DEBUG_RECOVER=1` | Print bucket and slot details during recovery |
+| `SMALLPIR_EXACT_SELECTOR_WEIGHTS=1` | Use the slow exact selector-weight computation path for validation |
+
+## Output Fields
+
+All timing values are reported in milliseconds.
+
+| Field | Meaning |
+|---|---|
+| `prep` | Database construction, Vacuum Filter insertion, and chunk packing time |
+| `request` / `Query time` | Client query generation time |
+| `expand` | Server selector expansion time |
+| `select` | Server chunk or slice selection time |
+| `ctct` | Server ciphertext-ciphertext multiplication time |
+| `response` / `Answer time` | Total server answer time |
+| `answer` / `Decrypt time` | Client decryption and fingerprint-checking time |
 | `online_total` | `Query + Answer + Decrypt` |
 
-## 注意事项
+## Notes
 
-- `SEALContext` 使用 `sec_level_type::none`，这是为了允许研究实验中的非标准参数通过 SEAL 检查，不代表默认 128-bit security。
-- encrypted-slice 模式默认使用 `9 x 55-bit` coeff modulus；如果设置 `SMALLPIR_COEFF_PRIMES=6`，则使用 `6 x 55-bit`。
-- `SMALLPIR_GBFV_FP4=1` 要求 `s=4`，因为每个 bucket 被模拟为一个 `F_{p^4}` slot。
-- full-prep 对大规模数据会非常慢且占用大量内存；大规模画图数据建议使用 `SMALLPIR_ONLINE_PACKED_PREP=1`。
+- The code creates the SEAL context with `sec_level_type::none` to allow non-standard research parameters. This does not mean that the parameters automatically satisfy SEAL's default 128-bit security checks.
+- `SMALLPIR_GBFV_FP4=1` expects `s=4`, since one bucket is represented as one simulated `F_{p^4}` slot.
+- Encrypted-slice mode consumes more noise than plaintext-slice mode. Use `SMALLPIR_COEFF_PRIMES=6` or a larger chain if the noise budget is insufficient.
+- Large full-preprocessing runs can be slow and memory-intensive because the program builds the synthetic database, inserts all records into the Vacuum Filter, and packs every chunk.
